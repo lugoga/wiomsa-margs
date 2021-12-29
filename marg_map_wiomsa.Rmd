@@ -1,0 +1,259 @@
+---
+title: "marg_support"
+author: "Masumbuko Semba"
+date: "11/19/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+You can read the information from [this link](https://www.jla-data.net/eng/leaflet-in-r-tips-and-tricks/)
+Interactive maps are a powerful visualization tool, and the javascript library leaflet.js is a great means to achieving this objective. The {leaflet} package from RStudio makes this library accessible from R.
+
+The package documentation is good, but as the interactive visualization is usually the last step of a complex process I felt the need to share some of my lessons learned.
+
+For this demonstrations I am using a data frame of Marine Research Grants grantee offered by WIOMSA in diffeent countries withinn the WIO region, but the actual choice of points is not that crucial – what I found nice for demonstration purposes is that:
+
+the MARG support are in two three categories
+can be grouped to three branches of power
+Is for researchers with publications with links to Google scholar
+
+The first step is creating the the data frame and making it feel spatial via the excellent {sf} package. By using a spatial data frame as data object of our leaflet call we are absolved from the need to specify longitude and latitude. This would be hassle (but doable) for points, but next to impossible for polygons.
+
+
+
+
+```{r}
+require(leaflet)
+require(sf)
+require(tidyverse)
+# require(tidy)
+require(leafpm)
+require(highcharter)
+library(viridisLite)
+library(forecast)
+library(treemap)
+```
+
+
+```{r, include=FALSE}
+margs = list()
+
+for (i in 1:3){
+margs[[i]] = readxl::read_excel("Interactive Maps- MARG.xlsx", sheet = i)
+}
+
+
+```
+
+
+```{r, include=FALSE}
+marg1 = margs[[1]] %>% rename(Name = `Full Name`) %>% 
+  separate(col = "Latitude", into = c("Latitude", "Longitude"), sep = ",") %>%
+  mutate(Longitude = Longitude %>% as.numeric(), 
+         Latitude = Latitude %>% as.numeric(), focus = "to conduct research on")
+
+marg2 = margs[[2]]   %>% 
+  separate(col = "Latitude", into = c("Latitude", "Longitude"), sep = ",") %>%
+  mutate(Longitude = Longitude %>% as.numeric(), 
+         Latitude = Latitude %>% as.numeric(), focus = "to analyse data on")
+
+marg3 = margs[[3]]   %>% 
+  separate(col = "Latitude", into = c("Latitude", "Longitude"), sep = ",") %>%
+  mutate(Longitude = Longitude %>% as.numeric(), 
+         Latitude = Latitude %>% as.numeric(), focus = "to attend conference on")
+
+grantee = marg1 %>% select(2:3,5:11,13) %>%  
+  bind_rows(marg2 %>% select(2:3,5:9, 11:14) %>% 
+              rename("Name" = 3, "Institution" = 7), 
+            marg3 %>% select(2:3,5:8, 10:14)%>% 
+              rename("Name" = 3,"Research Title" = 4, "Institution" = 7))
+
+
+
+```
+
+```{r, include=FALSE}
+
+htm_marg3_popup = paste0('<h2 style="color:#7A7A7A;">',marg3$`Full Name`,'</h2>', 
+                         '<p style="color:#00688B;">',
+                         " From ", "<b>", marg3$`Home Institution`, "</b>", 
+                         "<br>",
+                         " Attended the ", 
+                         "<i>",  marg3$`Conference Name`,"</i>", 
+                         " at ", marg3$`Conference City`, 
+                          " in ", marg3$Year,
+                         " through ", "<b>",marg3$`Grant Type`,"</b>", " support",'</p>',
+                         title = "The conference proceding is linked here
+                         <a href = 'https://ir.library.oregonstate.edu/concern/conference_proceedings_or_journals/xd07gt68r' target = '_blank'> (Community Participation in Fisheries Management in Tanzania) </a>",
+                         "<br>",
+                         "<img src='http://www.seascapemodels.org/images/intertidal_scene.JPG' 
+                         style='width:280px;height:230px;'>",
+                         "<br>",
+                         "The intertidal zone at Hornby Island")
+```
+
+
+```{r}
+all.marg.html = paste0('<h2 style="color:#7A7A7A;">',grantee$Name,'</h2>', 
+       '<p style="color: black;">',
+       " From ", grantee$Institution, " in ", grantee$Nationality, 
+       " Received Financial support through ", grantee$`Grant Type`," ",
+       grantee$focus, " ",'<i>', grantee$`Research Title`, '</i>','</p>',
+                         title = "You can check the page at
+                         <a href = 'https://ir.library.oregonstate.edu/concern/conference_proceedings_or_journals/xd07gt68r' target = '_blank'>  Google Schoolar </a>",
+                         "<br>",
+                         "<img src='http://www.seascapemodels.org/images/intertidal_scene.JPG' 
+                         style='width:280px;height:230px;'>",
+                         "<br>",
+                         "The intertidal zone at Hornby Island" )
+
+grantee.link = grantee %>% mutate(link = all.marg.html)
+```
+
+```{r}
+# prepare a palette - manual colors according to branch column
+palPwr <- leaflet::colorFactor(palette = c("MARG I" = "red", 
+                                           "MARG II" = "goldenrod", 
+                                           "MARG II" = "steelblue"), 
+                               domain = grantee.link$`Grant Type`)
+```
+
+
+
+```{r}
+leaflet(data = grantee.link) %>%
+  # addTiles() %>%
+   addProviderTiles("CartoDB.Positron") %>%
+  # addMarkers(lng = ~Longitude, lat = ~Latitude, popup = ~link) %>%
+  addCircleMarkers(lng = ~Longitude, 
+                   lat = ~Latitude, 
+                   popup = ~link,
+                   radius = 10, # size of the dots
+                   fillOpacity = .7, # alpha of the dots
+                   stroke = FALSE, # no outline
+                    color = palPwr(grantee.link$`Grant Type`),
+                   clusterOptions = markerClusterOptions()) %>% 
+  leaflet.extras::addResetMapButton()
+
+
+```
+
+
+
+```{r}
+
+margs_ver0 = leaflet(data = grantee.link) %>%
+  # addTiles() %>%
+   addProviderTiles("CartoDB.Positron") %>%
+  # addMarkers(lng = ~Longitude, lat = ~Latitude, popup = ~link) %>%
+  addCircleMarkers(lng = ~Longitude, 
+                   lat = ~Latitude, 
+                   popup = ~link,
+                   radius = 10, # size of the dots
+                   fillOpacity = .7, # alpha of the dots
+                   stroke = FALSE, # no outline
+                    color = palPwr(grantee.link$`Grant Type`),
+                   clusterOptions = markerClusterOptions()) %>% 
+  leaflet.extras::addResetMapButton()%>% 
+  leaflet::addLegend(position = "bottomright",
+            values = ~grantee.link$`Grant Type`, # data frame column for legend
+            opacity = .7, # alpha of the legend
+            pal = palPwr, # palette declared earlier
+            title = "Grant") # legend title
+
+margs_ver0
+```
+
+The custom icon takes two steps:
+
+declaring the icon via the makeIcon() function from the {leaflet} package
+specifying the icon declared earlier in the icon argument of an addMarkers call
+
+```{r}
+# declare an icon - link to an image somwehere on the net
+wiomsa.logo = leaflet::makeIcon(iconUrl = "https://www.wiomsa.org/wp-content/uploads/2019/02/WIOMSA-logo.png", # url to icon
+                   iconWidth = 100, iconHeight = 61) # sizing as required
+
+marg.icon = leaflet::makeIcon(iconUrl = "https://github.com/lugoga/wiomsa/blob/master/marg_icon-01.png", 
+                              iconWidth = 133, iconHeight = 41)
+
+```
+
+```{r}
+
+
+margs_ver1= leaflet(data = grantee.link) %>%
+  # addTiles() %>%
+   addProviderTiles("CartoDB.Positron") %>%
+  # addMarkers(lng = ~Longitude, lat = ~Latitude, popup = ~link) %>%
+  addMarkers(lng = ~Longitude, 
+                   lat = ~Latitude, 
+                   popup = ~link,
+                   clusterOptions = markerClusterOptions(),
+                   icon = wiomsa.logo) %>% 
+  leaflet.extras::addResetMapButton()
+
+margs_ver1
+```
+
+
+
+```{r}
+
+
+leaflet(data = grantee.link) %>%
+  # addTiles() %>%
+   addProviderTiles("CartoDB.Positron") %>%
+  # addMarkers(lng = ~Longitude, lat = ~Latitude, popup = ~link) %>%
+  addMarkers(lng = ~Longitude, 
+                   lat = ~Latitude, 
+                   popup = ~link,
+                   clusterOptions = markerClusterOptions(),
+                   icon = wiomsa.logo) %>%
+  leaflet.extras::addSearchFeatures(targetGroups = grantee.link$`Grant Type`)%>% 
+  leaflet.extras::addResetMapButton()
+```
+
+In some use cases it might be desirable to create a radio button functionality (one, and only one, group can be selected at any time); this can be done by assigning the vector of groups to a baseGroups object of the addLayersControl instead of overlayGroups.
+
+```{r}
+
+margI = grantee.link %>% filter(`Grant Type` == "MARG I")
+margII = grantee.link %>% filter(`Grant Type` == "MARG II")
+margIII = grantee.link %>% filter(`Grant Type` == "MARG III")
+
+margs_ver2 = leaflet() %>%
+  addTiles(group = "OSM") %>%
+  addProviderTiles("CartoDB.Positron", group = "CART") %>%
+  ## add a layer of MARG I
+  addMarkers(data = margI, lng = ~Longitude, 
+                   lat = ~Latitude, 
+                   popup = ~link,
+                   clusterOptions = markerClusterOptions(),
+                   icon = wiomsa.logo, 
+             group = "MARG I") %>% 
+  ## add a layer of MARG II
+  addMarkers(data = margII, lng = ~Longitude, 
+                   lat = ~Latitude, 
+                   popup = ~link,
+                   clusterOptions = markerClusterOptions(),
+                   icon = wiomsa.logo, 
+             group = "MARG II") %>% 
+  ## add a layer of MARG III
+  addMarkers(data = margIII, 
+             lng = ~Longitude, 
+             lat = ~Latitude, 
+             popup = ~link,
+             clusterOptions = markerClusterOptions(),
+             icon = wiomsa.logo, 
+             group = "MARG III")%>% 
+  leaflet::addLayersControl(baseGroups = c("OSM", "CART"),
+                            overlayGroups = c("MARG I", "MARG II", "MARG III"),
+                            options = layersControlOptions(collapsed = FALSE)) %>% 
+  leaflet.extras::addResetMapButton()
+
+margs_ver2
+```

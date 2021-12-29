@@ -1,0 +1,385 @@
+---
+title: "Untitled"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(knitr)
+library(DT)
+library(rpivotTable)
+library(tidyverse)
+library(plotly)
+library(dplyr)
+library(openintro)
+# library(highcharter)
+library(ggvis)
+
+require(leaflet)
+require(sf)
+require(leafpm)
+require(highcharter)
+library(viridisLite)
+library(forecast)
+library(treemap)
+```
+
+
+
+
+```{r, include=FALSE}
+margs = list()
+
+for (i in 1:3){
+margs[[i]] = readxl::read_excel("Interactive Maps- MARG.xlsx", sheet = i)
+}
+
+
+```
+
+
+```{r, include=FALSE}
+marg1 = margs[[1]] %>% rename(Name = `Full Name`) %>% 
+  separate(col = "Latitude", into = c("Latitude", "Longitude"), sep = ",") %>%
+  mutate(Longitude = Longitude %>% as.numeric(), 
+         Latitude = Latitude %>% as.numeric(), focus = "to conduct research on")
+
+marg2 = margs[[2]]   %>% 
+  separate(col = "Latitude", into = c("Latitude", "Longitude"), sep = ",") %>%
+  mutate(Longitude = Longitude %>% as.numeric(), 
+         Latitude = Latitude %>% as.numeric(), focus = "to analyse data on")
+
+marg3 = margs[[3]]   %>% 
+  separate(col = "Latitude", into = c("Latitude", "Longitude"), sep = ",") %>%
+  mutate(Longitude = Longitude %>% as.numeric(), 
+         Latitude = Latitude %>% as.numeric(), focus = "to attend conference on")
+
+grantee = marg1 %>% select(2:3,5:11,13) %>%  
+  bind_rows(marg2 %>% select(2:3,5:9, 11:14) %>% 
+              rename("Name" = 3, "Institution" = 7), 
+            marg3 %>% select(2:3,5:8, 10:14)%>% 
+              rename("Name" = 3,"Research Title" = 4, "Institution" = 7)) %>%
+    mutate(Nationality = replace(Nationality, Nationality == "TANZANIAN", 'Tanzania'),
+           Nationality = replace(Nationality, Nationality == "Tanzanian", 'Tanzania'),
+           Nationality = replace(Nationality, Nationality == "South African", 'South Africa'),
+           Nationality = replace(Nationality, Nationality == "Malagasy", 'Madagascar'),
+           Nationality = replace(Nationality, Nationality == "Zimbabwean", 'Zimbabwe'))
+
+
+
+
+```
+
+```{r, include=FALSE}
+
+htm_marg3_popup = paste0('<h2 style="color:#7A7A7A;">',marg3$`Full Name`,'</h2>', 
+                         '<p style="color:#00688B;">',
+                         " From ", "<b>", marg3$`Home Institution`, "</b>", 
+                         "<br>",
+                         " Attended the ", 
+                         "<i>",  marg3$`Conference Name`,"</i>", 
+                         " at ", marg3$`Conference City`, 
+                          " in ", marg3$Year,
+                         " through ", "<b>",marg3$`Grant Type`,"</b>", " support",'</p>',
+                         title = "The conference proceding is linked here
+                         <a href = 'https://ir.library.oregonstate.edu/concern/conference_proceedings_or_journals/xd07gt68r' target = '_blank'> (Community Participation in Fisheries Management in Tanzania) </a>",
+                         "<br>",
+                         "<img src='http://www.seascapemodels.org/images/intertidal_scene.JPG' 
+                         style='width:280px;height:230px;'>",
+                         "<br>",
+                         "The intertidal zone at Hornby Island")
+```
+
+
+```{r}
+all.marg.html = paste0('<h3 style="color:#7A7A7A;">',grantee$Name,'</h3>', 
+                       '<p style="color: black;">',
+                       " From ", grantee$Institution, " in ", grantee$Nationality, 
+                       " Received Financial support through ", grantee$`Grant Type`,
+                       " ",
+                       grantee$focus, 
+                       " ",
+                       '<i>', grantee$`Research Title`, '</i>','</p>',
+                         title = "You can check the page at
+                         <a href = 'https://ir.library.oregonstate.edu/concern/conference_proceedings_or_journals/xd07gt68r' target = '_blank'>  Google Schoolar </a>",
+                       "<br>",
+                       "<img src='http://www.seascapemodels.org/images/intertidal_scene.JPG' 
+                         style='width:280px;height:230px;'>",
+                         "<br>",
+                       "The intertidal zone at Hornby Island" )
+
+grantee.link = grantee %>% mutate(link = all.marg.html)
+```
+
+```{r}
+# prepare a palette - manual colors according to branch column
+palPwr <- leaflet::colorFactor(palette = c("MARG I" = "red", 
+                                           "MARG II" = "goldenrod", 
+                                           "MARG II" = "steelblue"), 
+                               domain = grantee.link$`Grant Type`)
+```
+
+```{r}
+world = spData::world
+wio = world %>% filter(name_long %in% c("Tanzania", "Kenya", "Somalia", "Mozambique", "South Africa", "Madagascar", "Seychelles", "Mauritius", "Reunion"))%>%
+  sf::st_transform('+proj=longlat +datum=WGS84')
+```
+
+PV
+========
+```{r}
+rpivotTable(iris, 
+            rendererName = "Treemap",
+            cols = c("Species"),
+            rows = c("Petal.Width"),
+            aggregatorName = "Count",
+            aggregators = list(Sum = htmlwidgets::JS('$.pivotUtilities.aggregators["Sum"]'),
+                               Count = htmlwidgets::JS('$.pivotUtilities.aggregators["Count"]')),
+            subtotals = TRUE)
+```
+
+
+Statistics
+====================================
+
+Row
+-----------------------------------
+
+### Marine Research Grants
+
+```{r}
+valueBox(paste("MARGs"),
+         color = "warning")
+```
+
+
+### MARG Granted in 2018
+
+```{r}
+valueBox(nrow(grantee),
+         icon = "fa-user")
+```
+
+### MARG I
+
+```{r}
+
+valueBox(sum(grantee$`Grant Type`== "MARG I"),
+         icon = 'fa-anchor')
+```
+
+### MARG II
+
+```{r}
+
+valueBox(sum(grantee$`Grant Type`== "MARG II"),
+         icon = 'fa-building')
+```
+
+### MARG III
+
+```{r}
+
+valueBox(sum(grantee$`Grant Type`== "MARG III"),
+         icon = 'fa-plane-departure')
+```
+
+
+Row
+-----------------------------------------------------
+
+### MARG I by Country
+```{r}
+# marg1 = grantee %>% 
+#   filter(`Grant Type` == "MARG I") %>% 
+#   group_by(Nationality) %>% summarise(count = n())%>% ungroup() %>%
+#   ggplot() +
+#   # ggpubr::ggdonutchart(x = 'count', label = 'Nationality', fill = "Nationality")
+#   geom_col(aes(x = Nationality, y = count), fill = "#EE7942") +
+#   # scale_y_continuous(breaks = seq(2,15,2))+
+#   cowplot::theme_minimal_grid() +
+#   labs(x = "", "Number of Grantee")+
+#   coord_flip()
+# 
+# 
+# plotly::ggplotly(marg1)
+
+  grantee %>% 
+  filter(`Grant Type` == "MARG I") %>% 
+  group_by(Nationality) %>% 
+    summarise(count = n())%>% 
+    ungroup() %>%
+    plot_ly(labels = ~Nationality,
+            values = ~count) %>%
+    add_pie(hole = .5)%>%
+         layout(showlegend = T,
+                xaxis = list(zeroline = F,
+                             showline = F,
+                             showticklabels = F,
+                             showgrid = F),
+                yaxis = list(zeroline = F,
+                             showline = F,
+                             showticklabels=F,
+                             showgrid=F), show)
+  
+
+    
+```
+
+
+
+### MARG II by Country
+```{r}
+# marg2 = grantee %>% 
+#   filter(`Grant Type` == "MARG II") %>% 
+#   group_by(Nationality) %>% summarise(count = n())%>%
+#   ggplot() +
+#   geom_col(aes(x = Nationality, y = count), fill = "#EE7942") +
+#   scale_y_continuous(breaks = seq(2,15,2))+
+#   cowplot::theme_minimal_grid() +
+#   labs(x = "", "Number of Grantee")+
+#   coord_flip()
+# 
+# plotly::ggplotly(marg2)
+  
+    grantee %>% 
+  filter(`Grant Type` == "MARG II") %>% 
+  group_by(Nationality) %>% 
+    summarise(count = n())%>% 
+    ungroup() %>%
+    plot_ly(labels = ~Nationality,
+            values = ~count) %>%
+    add_pie(hole = .5)%>%
+         layout(showlegend = T,
+                xaxis = list(zeroline = F,
+                             showline = F,
+                             showticklabels = F,
+                             showgrid = F),
+                yaxis = list(zeroline = F,
+                             showline = F,
+                             showticklabels=F,
+                             showgrid=F))
+  
+```
+
+
+### MARG III by Country
+```{r}
+# marg3 = grantee %>% 
+#   filter(`Grant Type` == "MARG III") %>% 
+#   group_by(Nationality) %>% summarise(count = n())%>%
+#   ggplot() +
+#   geom_col(aes(x = Nationality, y = count), fill = "#EE7942") +
+#   scale_y_continuous(breaks = seq(2,15,2))+
+#   cowplot::theme_minimal_grid() +
+#   labs(x = "", "Number of Grantee") +
+#   coord_flip()
+# 
+# plotly::ggplotly(marg3)
+  
+  grantee %>% 
+  filter(`Grant Type` == "MARG III") %>% 
+  group_by(Nationality) %>% 
+    summarise(count = n())%>% 
+    ungroup() %>%
+    plot_ly(labels = ~Nationality,
+            values = ~count) %>%
+    add_pie(hole = .5)%>%
+         layout(showlegend = T,
+                xaxis = list(zeroline = F,
+                             showline = F,
+                             showticklabels = F,
+                             showgrid = F),
+                yaxis = list(zeroline = F,
+                             showline = F,
+                             showticklabels=F,
+                             showgrid=F))
+  
+```
+
+
+Map
+===============================
+This is an interactive map that shows MARG beneficiers. You can zoom and pan to the area of intereste with the western indian ocean region using the tools on top right corner
+```{r}
+
+leaflet(data = grantee.link) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addProviderTiles("CartoDB.Positron", group = "CART") %>%
+  addTiles(group = "OSM") %>%
+  addPolygons(data = wio, group = "WIO") %>%
+  setView(lng = 39.685486, lat = -4.053337, zoom = 13) %>%
+  # setMaxBounds( lng1 = 14,
+  #               lat1 = -30,
+  #               lng2 = 74,
+  #               lat2 = 15 )%>%
+  addCircleMarkers(lng = ~Longitude, 
+                   # fillColor = palPwr(grantee.link$`Grant Type`),
+                   lat = ~Latitude, 
+                   popup = ~link,
+                   group = "Year", label = ~Year,
+                   radius = 10, # size of the dots
+                   fillOpacity = .7, # alpha of the dots
+                   stroke = FALSE, # no outline
+                   color = palPwr(grantee.link$`Grant Type`),
+                   clusterOptions = markerClusterOptions()) %>% 
+  leaflet::addLegend(position = "topright",
+            values = ~grantee.link$`Grant Type`, # data frame column for legend
+            opacity = .7, # alpha of the legend
+            pal = palPwr, # palette declared earlier
+            title = "Grant Type") %>%  # legend title 
+  leaflet.extras::addResetMapButton() %>%
+  leaflet.extras::addFullscreenControl(position = "topleft", pseudoFullscreen = FALSE) %>% 
+  leaflet::addLayersControl(baseGroups = c("CART", "OSM", "WIO"),
+                            # overlayGroups = c("MARG I", "MARG II", "MARG III"),
+                            options = layersControlOptions(collapsed = FALSE))
+```
+
+
+Pivoting
+====================
+```{r}
+
+grantee %>%
+  mutate(Gender = replace(Gender, Gender=="M", "Male"),
+         Gender = replace(Gender, Gender=="F", "Female"),
+         Institution = replace(Institution, Institution=="KENYA MARINE AND FISHERIES RESEARCH INSTITUTE", "Kenya Marine and Fisheries Research Institute"),
+         Institution = replace(Institution, Institution == "STATE UNIVERSITY OF ZANZIBAR",
+                               "State University of Zanzibar"))%>%
+  select(Institution,`Grant Type`, Nationality, Gender, Year) %>%
+  rpivotTable(aggregatorName = "Count", 
+              cols = "Nationality", 
+              rows = "`Grant Type`", 
+              # rendererName = "Heatmap",
+              rendererName = "Table Barchart")
+```
+
+
+
+
+About
+=========
+This dashboard was developed and created by Semba Masumbuko using **flexdashboard** package in R programming language and is the copyright of WIOMSA. This work used other open source software components. The following is a list of these components (full copies of the license agreements used by these components are included below):
+
+- rmarkdown
+- knitr
+- DT
+- rpivotTable
+- tidyverse
+- plotly
+- dplyr
+- openintro
+- highcharter
+- ggvis
+- leaflet
+- sf
+- highcharter
+- viridisLite
+- forecast
+- treemap
+
+

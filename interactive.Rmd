@@ -1,0 +1,129 @@
+---
+title: "Untitled"
+author: "Nyamisi"
+date: "September 20, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+# load necessary packages
+library(sf)
+require(leaflet)
+require(tidyverse)
+require(leaflet.extras)
+```
+
+
+```{r}
+
+
+## download zip file
+#download.file(url = "http://thematicmapping.org/downloads/TM_WORLD_BORDERS-0.3.zip", 
+              #destfile = "TM_WORLD_BORDERS-0.3.zip")
+
+## unzip 
+unzip(zipfile = "TM_WORLD_BORDERS-0.3.zip" )
+
+## transfrom to sf
+world.borders = read_sf( dsn = getwd(),
+                         layer = "TM_WORLD_BORDERS-0.3" )
+
+## add the wikipedia page for each country
+world.borders$wiki =  paste0("https://en.wikipedia.org/wiki/", 
+                             world.borders$NAME )
+
+## make leaflet map
+
+```
+
+```{r, eval=FALSE}
+my.map =  leaflet(options = leafletOptions(minZoom = 2)) %>%
+  setMaxBounds( lng1 = -180,
+                lat1 = -89.98155760646617,
+                lng2 = 180, 
+                lat2 = 89.99346179538875 ) %>%
+  addTiles() %>%
+  addPolygons( data = world.borders, 
+               fill = "#D24618", 
+               color = "#D24618", 
+               opacity = 0.5,
+               fillOpacity = 0.01,
+               weight = 3,
+               popup = paste0("<b>Country: </b>",
+                              world.borders$NAME,
+                              "<br>",
+                              "<a href='",
+                              world.borders$wiki,
+                              "' target='_blank'>",
+                              "Click Here to View Wiki</a>"),
+               label = ~NAME,
+               labelOptions = labelOptions(style = list("font-weight" = "normal",
+                                                        padding = "3px 8px",
+                                                        textsize = "15px",
+                                                        direction = "auto" )), 
+               highlightOptions = highlightOptions(color = "#10539A",
+                                                   weight = 3, 
+                                                   fillColor = NA))
+
+# display map
+my.map
+
+```
+
+
+```{r}
+content = paste(sep = "<br/>",
+                 "<b><a href='http://www.wiomsa.org'>WIOMSA</a></b>",
+                 "Mizingani Street",
+                 "Zanzibar, Tanzania")
+
+leaflet() %>% 
+  addTiles() %>%
+  addPopups(lng = 39.190552,
+            lat = -6.165172, 
+            popup = content,
+            options = popupOptions(closeButton = FALSE, keepInView = TRUE))
+```
+
+```{r}
+marg = readxl::read_excel(path = "grants_approved.xlsx", sheet = 1) %>% mutate(Grant =  rep(c("MARG", "MASMA"), times = 6)) 
+
+
+```
+
+
+```{r}
+marg = marg %>% 
+  mutate(popup = paste0(Status, " ", Beneficiery, " lead a ","<b>", Grant,"</b>"," Project ","<br/>", 
+                        "that focus on ",content, "<br>","<br>",
+                        "<a href='",link,"' target='_blank'>","Click Here to View Project Results</a>"))
+
+
+
+
+leaflet(data = marg) %>%
+  addTiles() %>%
+  # setView(lng = c(18.07, 57.5), lat = c(-34.0, -3.0), zoom = 12) %>%
+  addPopups(lng = ~lon, lat = ~lat, popup = ~popup) 
+
+
+```
+
+```{r}
+
+leaflet(data = marg) %>%
+  addTiles() %>%
+  # setView(lng = c(18.07, 57.5), lat = c(-34.0, -3.0), zoom = 12) %>%
+  leaflet.extras::addPulseMarkers(lng = ~lon, lat = ~lat, popup = ~popup, group = ~Grant,
+                    icon = makePulseIcon(heartbeat = 2, iconSize = 15, 
+                                         color = c("#ffa500", "#13ED3F"), animate = TRUE)) %>% 
+  addMiniMap() %>%
+  addLegend("topright", colors= c("#ffa500", "#13ED3F"), 
+            labels=c("MARG", "MASMA"), title="GRANTEEs 2018")
+```
+

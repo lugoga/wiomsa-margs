@@ -1,0 +1,421 @@
+---
+title: ""
+author: ""
+date: ""
+output: 
+  bookdown::html_document2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, include = FALSE)
+```
+
+
+
+```{r}
+require(leaflet)
+require(sf)
+require(tidyverse)
+# require(tidy)
+require(leafpm)
+require(highcharter)
+library(viridisLite)
+library(forecast)
+library(treemap)
+```
+
+
+```{r, include=FALSE}
+margs = list()
+
+for (i in 1:3){
+margs[[i]] = readxl::read_excel("Interactive Maps- MARG.xlsx", sheet = i)
+}
+
+
+```
+
+
+```{r, include=FALSE}
+marg1 = margs[[1]] %>% rename(Name = `Full Name`) %>% 
+  separate(col = "Latitude", into = c("Latitude", "Longitude"), sep = ",") %>%
+  mutate(Longitude = Longitude %>% as.numeric(), 
+         Latitude = Latitude %>% as.numeric(), focus = "to conduct research on")
+
+marg2 = margs[[2]]   %>% 
+  separate(col = "Latitude", into = c("Latitude", "Longitude"), sep = ",") %>%
+  mutate(Longitude = Longitude %>% as.numeric(), 
+         Latitude = Latitude %>% as.numeric(), focus = "to analyse data on")
+
+marg3 = margs[[3]]   %>% 
+  separate(col = "Latitude", into = c("Latitude", "Longitude"), sep = ",") %>%
+  mutate(Longitude = Longitude %>% as.numeric(), 
+         Latitude = Latitude %>% as.numeric(), focus = "to attend conference on")
+
+grantee = marg1 %>% select(2:3,5:11,13) %>%  
+  bind_rows(marg2 %>% select(2:3,5:9, 11:14) %>% 
+              rename("Name" = 3, "Institution" = 7), 
+            marg3 %>% select(2:3,5:8, 10:14)%>% 
+              rename("Name" = 3,"Research Title" = 4, "Institution" = 7))
+
+
+
+```
+
+```{r, include=FALSE}
+
+htm_marg3_popup = paste0('<h2 style="color:#7A7A7A;">',marg3$`Full Name`,'</h2>', 
+                         '<p style="color:#00688B;">',
+                         " From ", "<b>", marg3$`Home Institution`, "</b>", 
+                         "<br>",
+                         " Attended the ", 
+                         "<i>",  marg3$`Conference Name`,"</i>", 
+                         " at ", marg3$`Conference City`, 
+                          " in ", marg3$Year,
+                         " through ", "<b>",marg3$`Grant Type`,"</b>", " support",'</p>',
+                         title = "The conference proceding is linked here
+                         <a href = 'https://ir.library.oregonstate.edu/concern/conference_proceedings_or_journals/xd07gt68r' target = '_blank'> (Community Participation in Fisheries Management in Tanzania) </a>",
+                         "<br>",
+                         "<img src='http://www.seascapemodels.org/images/intertidal_scene.JPG' 
+                         style='width:280px;height:230px;'>",
+                         "<br>",
+                         "The intertidal zone at Hornby Island")
+```
+
+
+```{r}
+all.marg.html = paste0('<h3 style="color:#7A7A7A;">',grantee$Name,'</h3>', 
+                       '<p style="color: black;">',
+                       " From ", grantee$Institution, " in ", grantee$Nationality, 
+                       " Received Financial support through ", grantee$`Grant Type`,
+                       " ",
+                       grantee$focus, 
+                       " ",
+                       '<i>', grantee$`Research Title`, '</i>','</p>',
+                         title = "You can check the page at
+                         <a href = 'https://ir.library.oregonstate.edu/concern/conference_proceedings_or_journals/xd07gt68r' target = '_blank'>  Google Schoolar </a>",
+                       "<br>",
+                       "<img src='http://www.seascapemodels.org/images/intertidal_scene.JPG' 
+                         style='width:280px;height:230px;'>",
+                         "<br>",
+                       "The intertidal zone at Hornby Island" )
+
+grantee.link = grantee %>% mutate(link = all.marg.html)
+```
+
+```{r}
+# prepare a palette - manual colors according to branch column
+palPwr <- leaflet::colorFactor(palette = c("MARG I" = "red", 
+                                           "MARG II" = "goldenrod", 
+                                           "MARG II" = "steelblue"), 
+                               domain = grantee.link$`Grant Type`)
+```
+
+###  MARGs Interactive Maps {-}
+<!-- The challenges with this version is that most of the grantee are from similar institute. Because the geographical positions are drawn from the institute location, all grantees from similar institute are displayed in single points. Then this makes the map interactive but the information are hard to grasp (Figure \@ref(fig:zero)) -->
+
+```{r zero, fig.cap="All Grantees are mapped"}
+leaflet(data = grantee.link) %>%
+  # addTiles() %>%
+   addProviderTiles("CartoDB.Positron") %>%
+  # addMarkers(lng = ~Longitude, lat = ~Latitude, popup = ~link) %>%
+  addCircleMarkers(lng = ~Longitude, 
+                   lat = ~Latitude, 
+                   popup = ~link) %>% 
+  leaflet.extras::addResetMapButton()
+
+
+```
+
+<!-- Although the (Figure \@ref(fig:zero)) allows you to pan, zoom in and out, grantee from similar institution are harder to distinguish them. To overcome this challenge, I clustered grantees and then provided a legend for grant. With color--coded, you can distinguish grantees based on the color of the legend, which indicate the grant type. With a popup message, you can get more details of the grantee linked to the image and the Google scholar page (figure \@ref(fig:one). You will notice that the Google scholar page and custom image are the same for all the grantee. I just made this as a default, and will change them once we get more information of each grantee. You can also suggest other information that you may prefer to appear to the grantee -->
+
+```{r one, fig.cap="Grantee are clustered and a legend distinguish grant type received"}
+
+margs_ver0 = leaflet(data = grantee.link) %>%
+  # addTiles() %>%
+   addProviderTiles("CartoDB.Positron") %>%
+  # addMarkers(lng = ~Longitude, lat = ~Latitude, popup = ~link) %>%
+  addCircleMarkers(lng = ~Longitude, 
+                   lat = ~Latitude, 
+                   popup = ~link,
+                   radius = 10, # size of the dots
+                   fillOpacity = .7, # alpha of the dots
+                   stroke = FALSE, # no outline
+                    color = palPwr(grantee.link$`Grant Type`),
+                   clusterOptions = markerClusterOptions()) %>% 
+  leaflet.extras::addResetMapButton()%>% 
+  leaflet::addLegend(position = "bottomright",
+            values = ~grantee.link$`Grant Type`, # data frame column for legend
+            opacity = .7, # alpha of the legend
+            pal = palPwr, # palette declared earlier
+            title = "Grant") # legend title
+
+margs_ver0
+```
+
+
+<!-- Figure \@ref(fig:two) show similar feature to those in figure \@ref(fig:one) except that figure \@ref(fig:two) icon is customized with WIOMSA logo. We can discuss of the graphic or logo that better suits you. -->
+
+```{r}
+# The custom icon takes two steps:
+# 
+# declaring the icon via the makeIcon() function from the {leaflet} package
+# specifying the icon declared earlier in the icon argument of an addMarkers call
+# declare an icon - link to an image somwehere on the net
+wiomsa.logo = leaflet::makeIcon(iconUrl = "https://www.wiomsa.org/wp-content/uploads/2019/02/WIOMSA-logo.png", # url to icon
+                   iconWidth = 100, iconHeight = 61) # sizing as required
+
+marg.icon = leaflet::makeIcon(iconUrl = "https://github.com/lugoga/wiomsa/blob/master/marg_icon-01.png", 
+                              iconWidth = 133, iconHeight = 41)
+
+```
+
+
+```{r two, fig.cap="Grantee mapped with customized logo of WIOMSA"}
+
+
+margs_ver1= leaflet(data = grantee.link) %>%
+  # addTiles() %>%
+   addProviderTiles("CartoDB.Positron") %>%
+  # addMarkers(lng = ~Longitude, lat = ~Latitude, popup = ~link) %>%
+  addMarkers(lng = ~Longitude, 
+                   lat = ~Latitude, 
+                   popup = ~link,
+                   clusterOptions = markerClusterOptions(),
+                   icon = wiomsa.logo) %>% 
+  leaflet.extras::addResetMapButton()
+
+margs_ver1
+```
+
+
+
+```{r, include=FALSE}
+
+
+leaflet(data = grantee.link) %>%
+  # addTiles() %>%
+   addProviderTiles("CartoDB.Positron") %>%
+  # addMarkers(lng = ~Longitude, lat = ~Latitude, popup = ~link) %>%
+  addMarkers(lng = ~Longitude, 
+                   lat = ~Latitude, 
+                   popup = ~link,
+                   clusterOptions = markerClusterOptions(),
+                   icon = wiomsa.logo) %>%
+  leaflet.extras::addSearchFeatures(targetGroups = grantee.link$`Grant Type`)%>% 
+  leaflet.extras::addResetMapButton()
+```
+
+At some cases, it might be desirable to display only a particular type of grantee. In this case I customized the map with a radio button function that allows you to display one or more grant type as shown in figure \@ref(fig:three). It also allows you to toggle the basemap or the type of grant you may wish to visualize. This makes easy to assess, analyse and understand how grantee are offered both in space and time.
+
+
+```{r three, include=T, fig.cap="Grantted clustered with radio buttons "}
+
+margI = grantee.link %>% filter(`Grant Type` == "MARG I")
+margII = grantee.link %>% filter(`Grant Type` == "MARG II")
+margIII = grantee.link %>% filter(`Grant Type` == "MARG III")
+
+margs_ver2 = leaflet() %>%
+  addTiles(group = "OSM") %>%
+  addProviderTiles("CartoDB.Positron", group = "CART") %>%
+  ## add a layer of MARG I
+  addMarkers(data = margI, lng = ~Longitude, 
+                   lat = ~Latitude, 
+                   popup = ~link,
+                   clusterOptions = markerClusterOptions(),
+                   icon = wiomsa.logo, 
+             group = "MARG I") %>% 
+  ## add a layer of MARG II
+  addMarkers(data = margII, lng = ~Longitude, 
+                   lat = ~Latitude, 
+                   popup = ~link,
+                   clusterOptions = markerClusterOptions(),
+                   icon = wiomsa.logo, 
+             group = "MARG II") %>% 
+  ## add a layer of MARG III
+  addMarkers(data = margIII, 
+             lng = ~Longitude, 
+             lat = ~Latitude, 
+             popup = ~link,
+             clusterOptions = markerClusterOptions(),
+             icon = wiomsa.logo, 
+             group = "MARG III")%>% 
+  leaflet::addLayersControl(baseGroups = c("OSM", "CART"),
+                            overlayGroups = c("MARG I", "MARG II", "MARG III"),
+                            options = layersControlOptions(collapsed = FALSE)) %>% 
+  leaflet.extras::addResetMapButton()
+
+margs_ver2
+# htmltools::save_html(html = marg.ver2, file = "version2.html")
+```
+
+
+### Recommendation {-}
+After a discussion with Mathias, three aspects were pointed out. These includes
+
+
+- use the color coded to distinguish Marg types
+- add the ribbon for years
+- set display to within the region
+- bring grantee back to the home institutions
+
+I worked on the suggestion and rendered another version of interactive map shown in Figure \@ref(fig:four).
+Figure \@ref(fig:four) distinguish grantee based on color---grant type. . With a popup message, you can get more details of the grantee linked to the image and the Google scholar page (figure \@ref(fig:four)). You notice that the Google scholar page and custom image are the same for all the grantee. That's is simply a provision, and will change this default information to the real ones once we obtain information of each grantee. You can also suggest other information that you may prefer to appear to the grantee.
+
+```{r}
+# prepare a palette - manual colors according to branch column
+palPwr <- leaflet::colorFactor(palette = c("MARG I" = "red", 
+                                           "MARG II" = "goldenrod", 
+                                           "MARG II" = "steelblue"), 
+                               domain = grantee.link$`Grant Type`)
+```
+
+
+
+```{r four, include=T, fig.cap="Grantee in clustered and individual are colour-coded based on the type of grant received"}
+
+marg.ver3 =  leaflet(data = grantee.link) %>%
+  addProviderTiles("CartoDB.Positron", group = "CART") %>%
+  addTiles(group = "OSM") %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  # setView(lng = 40.561352, lat = -15.120450, zoom = 4) %>%
+  # setMaxBounds( lng1 = 13.35938,
+  #               lat1 = -40.70016,
+  #               lng2 = 73.47656,
+  #               lat2 = 13.06878 )%>%
+  addCircleMarkers(lng = ~Longitude, 
+                   # fillColor = palPwr(grantee.link$`Grant Type`),
+                   lat = ~Latitude, 
+                   popup = ~link,
+                   group = "Year", label = ~Year,
+                   radius = 10, # size of the dots
+                   fillOpacity = .7, # alpha of the dots
+                   stroke = FALSE, # no outline
+                   color = palPwr(grantee.link$`Grant Type`),
+                   clusterOptions = markerClusterOptions()) %>% 
+  leaflet::addLegend(position = "topright",
+            values = ~grantee.link$`Grant Type`, # data frame column for legend
+            opacity = .7, # alpha of the legend
+            pal = palPwr, # palette declared earlier
+            title = "Grant Type") %>%  # legend title 
+  leaflet.extras::addResetMapButton() %>%
+  leaflet.extras::addFullscreenControl(position = "topleft", pseudoFullscreen = FALSE) %>% 
+  leaflet::addLayersControl(baseGroups = c("CART", "OSM"),
+                            # overlayGroups = c("MARG I", "MARG II", "MARG III"),
+                            options = layersControlOptions(collapsed = FALSE))
+
+
+marg.ver3
+# htmltools::save_html(html = marg.ver3, file = "version3.html")
+```
+
+
+```{r}
+
+africa = spData::world %>% filter(continent == "Africa") %>% select(country = name_long)
+
+grantee.sf = grantee.link %>% 
+  janitor::clean_names() %>% 
+  filter(grant_type == "MARG III") %>% 
+  sf::st_as_sf(coords = c("longitude", "latitude"), crs = 4326) 
+
+
+aa = grantee.sf %>% 
+  st_join(africa, join = st_within) %>% 
+  group_by(country) %>% 
+  count() %>% 
+  st_drop_geometry() %>% 
+  as_tibble()
+
+tmap_mode(mode = "view")
+
+africa %>% 
+  left_join(aa) %>% 
+  tm_shape() +
+  tm_polygons(col = "n", id = "country", popup.vars = c("Grantee" = "n"))
+```
+
+
+```{r}
+
+grantee.link %>% 
+  janitor::clean_names() %>% 
+  mutate(gender = if_else(gender == "M", "Male", gender), 
+         gender = if_else(gender == "F", "Female",gender)) %>% 
+  filter(grant_type == "MARG III") %>% 
+  filter(year == 2018) %>%
+  separate(col = nationality, into = c("country", "code"), sep = " - ") %>% 
+  group_by(country) %>% 
+  summarise(n = n(), .groups = "drop") %>% 
+  plot_ly(type = "pie", 
+          labels = ~country, 
+          values = ~n, 
+          hole = .5, 
+            textinfo='label+percent',
+            insidetextorientation='radial') %>% 
+  layout(
+  showlegend = F,
+           xaxis = list(showgrid = FALSE, zeroline = FALSE, 
+                        showticklabels = FALSE),
+           yaxis = list(showgrid = FALSE, 
+                        zeroline = FALSE, showticklabels = FALSE)
+           ) 
+
+
+
+
+
+
+
+```
+
+```{r}
+
+library(wordcloud)
+require(ggwordcloud)
+require(magrittr)
+require(tidyverse)
+require(tidytext)
+require(wordcloud)
+require(RColorBrewer)
+require(magrittr)
+
+pal <- brewer.pal(8,"Dark2")
+
+
+doc = grantee.link %>% 
+  janitor::clean_names() %>% 
+  filter(grant_type == "MARG III") %>%
+  # filter(year == 2020) %>% 
+  pull(research_title)%>% 
+  tm::VectorSource() %>%
+  tm::Corpus() %>% 
+  # clean text data
+  tm::tm_map(tm::removePunctuation) %>%
+  tm::tm_map(tm::removeNumbers) %>%
+  tm::tm_map(tolower)  %>%
+  tm::tm_map(tm::removeWords, tm::stopwords("english")) %>%
+  tm::tm_map(tm::stripWhitespace) %>%
+  tm::tm_map(tm::PlainTextDocument)
+
+
+doc2 = doc$content$content %>% 
+  as_tibble() %>% 
+  stringr::str_split(pattern = " ") %>% 
+  as.data.frame() %>% 
+  rename(text = 1)
+
+doc.group = doc2 %>% 
+  group_by(text) %>% 
+  count() %>% 
+  arrange(desc(n)) %>% 
+  ungroup()
+
+doc.group  %$% 
+  ggwordcloud::ggwordcloud(words = text,
+                           freq = n, 
+                           random.order = FALSE, 
+                           max.words = 120, 
+                           colors = pal)
+```
+

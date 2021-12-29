@@ -1,0 +1,13 @@
+name: marg-app
+title: marg-app
+username:
+account: semba
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 5379187
+bundleId: 5418041
+url: https://semba.shinyapps.io/marg-app/
+when: 1640810133.6591
+lastSyncTime: 1640810133.6591
+asMultiple: FALSE
+asStatic: FALSE

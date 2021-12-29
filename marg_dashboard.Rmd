@@ -1,0 +1,183 @@
+---
+title: "WIOMSA MARGEE GRANTEE"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+require(leaflet)
+require(sf)
+require(tidyverse)
+# require(tidy)
+require(leafpm)
+require(highcharter)
+library(viridisLite)
+library(forecast)
+library(treemap)
+
+
+```
+
+
+
+```{r, include=FALSE}
+margs = list()
+
+for (i in 1:3){
+margs[[i]] = readxl::read_excel("Interactive Maps- MARG.xlsx", sheet = i)
+}
+
+
+```
+
+
+```{r, include=FALSE}
+marg1 = margs[[1]] %>% rename(Name = `Full Name`) %>% 
+  separate(col = "Latitude", into = c("Latitude", "Longitude"), sep = ",") %>%
+  mutate(Longitude = Longitude %>% as.numeric(), 
+         Latitude = Latitude %>% as.numeric(), focus = "to conduct research on")
+
+marg2 = margs[[2]]   %>% 
+  separate(col = "Latitude", into = c("Latitude", "Longitude"), sep = ",") %>%
+  mutate(Longitude = Longitude %>% as.numeric(), 
+         Latitude = Latitude %>% as.numeric(), focus = "to analyse data on")
+
+marg3 = margs[[3]]   %>% 
+  separate(col = "Latitude", into = c("Latitude", "Longitude"), sep = ",") %>%
+  mutate(Longitude = Longitude %>% as.numeric(), 
+         Latitude = Latitude %>% as.numeric(), focus = "to attend conference on")
+
+grantee = marg1 %>% select(2:3,5:11,13) %>%  
+  bind_rows(marg2 %>% select(2:3,5:9, 11:14) %>% 
+              rename("Name" = 3, "Institution" = 7), 
+            marg3 %>% select(2:3,5:8, 10:14)%>% 
+              rename("Name" = 3,"Research Title" = 4, "Institution" = 7))
+
+
+
+```
+
+```{r, include=FALSE}
+
+htm_marg3_popup = paste0('<h2 style="color:#7A7A7A;">',marg3$`Full Name`,'</h2>', 
+                         '<p style="color:#00688B;">',
+                         " From ", "<b>", marg3$`Home Institution`, "</b>", 
+                         "<br>",
+                         " Attended the ", 
+                         "<i>",  marg3$`Conference Name`,"</i>", 
+                         " at ", marg3$`Conference City`, 
+                          " in ", marg3$Year,
+                         " through ", "<b>",marg3$`Grant Type`,"</b>", " support",'</p>',
+                         title = "The conference proceding is linked here
+                         <a href = 'https://ir.library.oregonstate.edu/concern/conference_proceedings_or_journals/xd07gt68r' target = '_blank'> (Community Participation in Fisheries Management in Tanzania) </a>",
+                         "<br>",
+                         "<img src='http://www.seascapemodels.org/images/intertidal_scene.JPG' 
+                         style='width:280px;height:230px;'>",
+                         "<br>",
+                         "The intertidal zone at Hornby Island")
+```
+
+
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+africa = sf::st_read("e:/GIS/Tanzania spatial data Bank/EAF14 Tanzania spatial datasets/africa/Spatial/AdmInfr/africa2.shp")
+
+
+```
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+
+### GRANTEE INTERACTIVE MAP
+
+```{r}
+marg3 %>% 
+  leaflet() %>%
+  addTiles(group = "OSM") %>%
+  addProviderTiles("CartoDB.Positron", group = "CART") %>%
+  setView(lng = 37.5, lat = -17.25, zoom = 4) %>%
+  addMarkers(lng = ~Longitude, lat = ~Latitude, popup =htm_marg3_popup)%>%
+  # addAwesomeMarkers(lng = ~Longitude, lat = ~Latitude, popup =htm_marg3_popup)%>%
+  addPmToolbar(toolbarOptions = pmToolbarOptions(drawMarker = FALSE, position = "topleft"),
+              drawOptions = pmDrawOptions(snappable = FALSE, allowSelfIntersection = FALSE),
+              editOptions = pmEditOptions(preventMarkerRemoval = TRUE, draggable = FALSE),
+              cutOptions = pmCutOptions(snappable = FALSE, allowSelfIntersection = FALSE)) %>%
+  leaflet::addLayersControl(baseGroups = c("OSM", "CART"),
+                            overlayGroups = c("MARG I", "MARG II"))
+```
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Chart B
+One of the important feature of WIOMSA is the financial support offered to 
+
+
+
+```{r}
+
+margs = marg1 %>% bind_rows(marg2, marg3)
+
+country.number = margs%>% 
+  mutate(Nationality = replace(Nationality, Nationality == "Malagasy", "Madagascar"),
+         Nationality = replace(Nationality, Nationality == "British", "Tanzania"),
+         Nationality = replace(Nationality, Nationality == "Portugal", "Mozambique"),
+         Nationality = replace(Nationality, Nationality == "Mauritian", "Mauritius"),
+         Nationality = replace(Nationality, Nationality == "South African", "South Africa"),
+         Nationality = replace(Nationality, Nationality == "Tanzanian", "Tanzania"),
+         Nationality = replace(Nationality, Nationality == "TANZANIAN", "Tanzania")) %>% group_by(Nationality) %>% tally() %>% 
+  ungroup()%>%
+  filter(Nationality != "Zimbabwean")%>%
+  mutate( percentage = round(n/sum(n), digits = 3)*100) %>%
+  rename(Country = 1, Grantee = 2, Percentage = 3)
+
+
+# DT::datatable(data = country.number %>% 
+#                 arrange(desc(Grantee)), 
+#               rownames = FALSE, 
+#               autoHideNavigation = TRUE, style = "bootstrap")
+
+# country.number %>% kableExtra::kable(format = "html")
+
+
+
+
+```
+
+
+```{r}
+# mapview::mapview(africa)
+
+leaflet(data = africa) %>%
+  setView(lng = 37.5, lat = -17.25, zoom = 4) %>%
+  addProviderTiles("CartoDB.Positron", group = "CART") %>%
+  addPolygons(color = "#444444",
+              group = "POPYCOUN", 
+              weight = 1,
+              smoothFactor = 0.5,
+              opacity = 1.0,
+              fillOpacity = 0.5,
+              highlightOptions = highlightOptions(color = "white",
+                                                  weight = 2,
+                                                  bringToFront = TRUE)) 
+```
+
+### MARGS
+```{r}
+
+all.marg.html = paste0('<h2 style="color:#7A7A7A;">',grantee$Name,'</h2>', 
+       '<p style="color: #00688B;">',
+       " From ", grantee$Institution, " in ", grantee$Nationality, 
+       " Received Financial support through ", grantee$`Grant Type`," ",
+       grantee$focus, " ",'<i>', grantee$`Research Title`, '</i>','</p>' )
+
+leaflet(data = grantee) %>%
+  # addTiles() %>%
+  addProviderTiles("CartoDB.Positron", group = "CART") %>%
+  addMarkers(lng = ~Longitude, lat = ~Latitude, popup = all.marg.html, 
+             clusterOptions = markerClusterOptions()) 
+```
+
